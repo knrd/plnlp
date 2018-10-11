@@ -8,6 +8,7 @@ import argparse
 from helpers import *
 from model import *
 
+
 def generate(decoder, prime_str='A', predict_len=100, temperature=0.8, cuda=False):
     hidden = decoder.init_hidden(1)
     prime_input = Variable(char_tensor(prime_str).unsqueeze(0))
@@ -39,10 +40,10 @@ def generate(decoder, prime_str='A', predict_len=100, temperature=0.8, cuda=Fals
 
     return predicted
 
+
 # Run as standalone script
 if __name__ == '__main__':
-
-# Parse command line arguments
+    # Parse command line arguments
     argparser = argparse.ArgumentParser()
     argparser.add_argument('filename', type=str)
     argparser.add_argument('-p', '--prime_str', type=str, default='A')
@@ -54,4 +55,3 @@ if __name__ == '__main__':
     decoder = torch.load(args.filename)
     del args.filename
     print(generate(decoder, **vars(args)))
-

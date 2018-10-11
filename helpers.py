@@ -2,7 +2,6 @@
 
 import unidecode
 import string
-import random
 import time
 import math
 import torch
@@ -12,12 +11,13 @@ import torch
 all_characters = string.printable
 n_characters = len(all_characters)
 
+
 def read_file(filename):
     file = unidecode.unidecode(open(filename).read())
     return file, len(file)
 
-# Turning a string into a tensor
 
+# Turning a string into a tensor
 def char_tensor(string):
     tensor = torch.zeros(len(string)).long()
     for c in range(len(string)):
@@ -27,11 +27,14 @@ def char_tensor(string):
             continue
     return tensor
 
-# Readable time elapsed
 
+def start_time():
+    return time.time()
+
+
+# Readable time elapsed
 def time_since(since):
-    s = time.time() - since
+    s = start_time() - since
     m = math.floor(s / 60)
     s -= m * 60
     return '%dm %ds' % (m, s)
-

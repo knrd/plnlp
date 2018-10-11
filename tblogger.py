@@ -2,6 +2,7 @@
 import tensorflow as tf
 import numpy as np
 import scipy.misc
+import os
 
 try:
     from StringIO import StringIO  # Python 2.7
@@ -9,20 +10,35 @@ except ImportError:
     from io import BytesIO  # Python 3.x
 
 
-class Logger(object):
+class TBLogger(object):
 
     def __init__(self, log_dir):
+        self.log_dir = log_dir
+        self.writers = {}
+
+    def _get_writer(self, sub_dir):
         """Create a summary writer logging to log_dir."""
-        self.writer = tf.summary.FileWriter(log_dir)
+        if sub_dir:
+            path = os.path.join(self.log_dir, sub_dir)
+        else:
+            path = self.log_dir
 
-    def scalar_summary(self, tag, value, step):
+        writer = self.writers.get(path)
+        if writer is None:
+            self.writers[path] = tf.summary.FileWriter(path)
+
+        return self.writers[path]
+
+    def scalar_summary(self, sub_dir, tag, value, step):
         """Log a scalar variable."""
+        writer = self._get_writer(sub_dir)
         summary = tf.Summary(value=[tf.Summary.Value(tag=tag, simple_value=value)])
-        self.writer.add_summary(summary, step)
+        writer.add_summary(summary, step)
 
-    def image_summary(self, tag, images, step):
+    def image_summary(self, sub_dir, tag, images, step):
         """Log a list of images."""
 
+        writer = self._get_writer(sub_dir)
         img_summaries = []
         for i, img in enumerate(images):
             # Write the image to a string
@@ -41,10 +57,11 @@ class Logger(object):
 
         # Create and write Summary
         summary = tf.Summary(value=img_summaries)
-        self.writer.add_summary(summary, step)
+        writer.add_summary(summary, step)
 
-    def histo_summary(self, tag, values, step, bins=1000):
+    def histo_summary(self, sub_dir, tag, values, step, bins=1000):
         """Log a histogram of the tensor of values."""
+        writer = self._get_writer(sub_dir)
 
         # Create a histogram using numpy
         counts, bin_edges = np.histogram(values, bins=bins)
@@ -68,5 +85,5 @@ class Logger(object):
 
         # Create and write Summary
         summary = tf.Summary(value=[tf.Summary.Value(tag=tag, histo=hist)])
-        self.writer.add_summary(summary, step)
-        self.writer.flush()
+        writer.add_summary(summary, step)
+        writer.flush()
