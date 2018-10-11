@@ -1,4 +1,4 @@
-# https://github.com/spro/practical-pytorch
+# https://github.com/spro/char-rnn.pytorch
 
 import unidecode
 import string
@@ -6,7 +6,6 @@ import random
 import time
 import math
 import torch
-from torch.autograd import Variable
 
 # Reading and un-unicode-encoding data
 
@@ -22,8 +21,11 @@ def read_file(filename):
 def char_tensor(string):
     tensor = torch.zeros(len(string)).long()
     for c in range(len(string)):
-        tensor[c] = all_characters.index(string[c])
-    return Variable(tensor)
+        try:
+            tensor[c] = all_characters.index(string[c])
+        except:
+            continue
+    return tensor
 
 # Readable time elapsed
 
