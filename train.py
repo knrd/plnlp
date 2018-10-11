@@ -132,7 +132,7 @@ class Trainer(object):
 if __name__ == '__main__':
     # Parse command line arguments
     argparser = argparse.ArgumentParser()
-    argparser.add_argument('filename', type=str)
+    # argparser.add_argument('filename', type=str)
     argparser.add_argument('--model', type=str, default="gru")
     argparser.add_argument('--n_epochs', type=int, default=2000)
     argparser.add_argument('--print_every', type=int, default=1)
@@ -142,11 +142,11 @@ if __name__ == '__main__':
     argparser.add_argument('--chunk_len', type=int, default=200)
     argparser.add_argument('--batch_size', type=int, default=100)
     argparser.add_argument('--nocuda', action='store_true', default=False)
-    # args = argparser.parse_args()
+    args = argparser.parse_args()
 
     print('Running tests')
     for model in ["gru", "lstm"]:
         for hidden_size in [100, 50]:
             for lr in [0.003, 0.01, 0.03, 0.1, 0.3][::-1]:
-                t = Trainer(filename='shakespeare.txt', model=model, hidden_size=hidden_size)
+                t = Trainer(filename='shakespeare.txt', model=model, hidden_size=hidden_size, cuda=not args.nocuda)
                 t.train(lr, n_epochs=200)
