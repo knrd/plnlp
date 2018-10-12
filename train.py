@@ -8,19 +8,17 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 
-from helpers import read_file, start_time, time_since, n_characters, char2tensor
-from model import CharRNN
+from content_reader import FileReader
 from generate import generate
+from model import CharRNN
 from tblogger import TBLogger
 
 
 class Trainer(object):
-    def __init__(self, filename, model="gru", hidden_size=100, n_layers=2, cuda=True, chunk_len=200, batch_size=100, tensorboard=True, verbose=1):
+    def __init__(self, content_reader, model="gru", hidden_size=100, n_layers=2, cuda=True, chunk_len=200, batch_size=100, tensorboard=True, verbose=1):
         self.verbose = verbose
         self.cuda = cuda
-        self.filename = filename
-        self.file, self.file_len = read_file(self.filename)
-        self.start = start_time()
+        self.content_reader = content_reader
         self.all_losses = []
         self.loss_avg = 0
         self.chunk_len = chunk_len
@@ -35,9 +33,9 @@ class Trainer(object):
 
         # Initialize models
         self.decoder = CharRNN(
-            input_size=n_characters,
+            input_size=self.content_reader.char_dict_len,
             hidden_size=self.hidden_size,
-            output_size=n_characters,
+            output_size=self.content_reader.char_dict_len,
             model=model,
             n_layers=self.n_layers,
         )
@@ -50,10 +48,15 @@ class Trainer(object):
         inp = torch.LongTensor(self.batch_size, self.chunk_len)
         target = torch.LongTensor(self.batch_size, self.chunk_len)
         for bi in range(self.batch_size):
-            start_index = random.randint(0, self.file_len - self.chunk_len - 1)
+            start_index = random.randint(0, self.content_reader.content_len - self.chunk_len - 1)
             end_index = start_index + self.chunk_len + 1
-            chunk = self.file[start_index:end_index]
-            inp[bi], target[bi] = char2tensor(chunk)
+            chunk = self.content_reader.content[start_index:end_index]
+            inp[bi] = self.content_reader.char2tensor(chunk[:-1])
+            target[bi] = self.content_reader.char2tensor(chunk[1:])
+
+            # assert (inp[bi] == t_inp).all().item()
+            # assert (target[bi] == t_target).all().item()
+
         if self.cuda:
             inp = inp.cuda()
             target = target.cuda()
@@ -82,19 +85,19 @@ class Trainer(object):
 
         return loss.data.item() / self.chunk_len, accuracy.data.item()
 
-    def train(self, learning_rate, n_epochs=200, print_every=0, skip_if_tested=False):
+    def train(self, learning_rate, n_epochs=200, skip_if_tested=False):
         label = "e_%d-m_%s-lr_%s-hs_%d-nl-%d" % (n_epochs, self.model, learning_rate, self.hidden_size, self.n_layers)
 
         if skip_if_tested:
             if not self.logger:
                 raise AttributeError('logger is not provided')
             if os.path.exists(self.logger.get_path(label)):
-                print("Test", label, "exists, skipping")
+                print("Test", label, "exists, skipping", flush=True)
                 return None
 
         decoder_optimizer = torch.optim.Adam(self.decoder.parameters(), lr=learning_rate)
         try:
-            print("Training %s for %d epochs..." % (label, n_epochs))
+            print("Training %s for %d epochs..." % (label, n_epochs), flush=True)
             for epoch in tqdm(range(1, n_epochs + 1)):
                 inp, target = self._random_training_set()
                 loss, accuracy = self.train_step(inp, target, decoder_optimizer)
@@ -107,25 +110,23 @@ class Trainer(object):
                     for tag, value in info.items():
                         self.logger.scalar_summary(label, tag, value, epoch)
 
-                if self.verbose and print_every and epoch % print_every == 0:
-                    print('[%s (%d %d%%) %.4f]' % (time_since(self.start), epoch, epoch / n_epochs * 100, loss))
-                    if self.verbose > 1:
-                        print(generate(self.decoder, 'Wh', 100, cuda=self.cuda), '\n')
+                # if self.verbose > 1:
+                #     print(generate(self.decoder, 'Wh', 100, cuda=self.cuda), '\n')
 
-            print("Saving...")
+            print("Saving...", flush=True)
             self.save(label)
 
         except KeyboardInterrupt:
-            print("Saving before quit...")
+            print("Saving before quit...", flush=True)
             self.save(label)
             raise SystemExit
 
     def save(self, label=''):
         os.makedirs('models', exist_ok=True)
-        save_filename = os.path.join('models', os.path.splitext(os.path.basename(self.filename))[0] + label + '.pt')
+        save_filename = os.path.join('models', os.path.splitext(os.path.basename(self.content_reader.file_name))[0] + label + '.pt')
         torch.save(self.decoder, save_filename)
         self.logger.flush(label)
-        print('Saved as %s' % save_filename)
+        print('Saved as %s' % save_filename, flush=True)
 
 
 # Run as standalone script
@@ -146,9 +147,15 @@ if __name__ == '__main__':
 
     use_cuda = not args.nocuda
 
-    print('Running tests', 'using CUDA' if use_cuda else 'CPU')
+    content = FileReader('shakespeare.txt')
+    # print(content.char_dict)
+
+    print('Running tests', 'using CUDA' if use_cuda else 'CPU', flush=True)
     for model in ["gru"]:
         for hidden_size in [100]:
             for lr in [0.01][::-1]:
-                t = Trainer(filename='shakespeare.txt', model=model, hidden_size=hidden_size, cuda=False)
-                t.train(lr, n_epochs=10, skip_if_tested=False)
+                t = Trainer(content_reader=content, model=model, hidden_size=hidden_size, cuda=use_cuda)
+                t.train(lr, n_epochs=2, skip_if_tested=False)
+
+                generated_text = generate(t.decoder, content, prime_str='Wh', cuda=use_cuda)
+                print(generated_text, '\n', flush=True)

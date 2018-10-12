@@ -2,7 +2,7 @@
 
 import torch
 import torch.nn as nn
-from torch.autograd import Variable
+
 
 class CharRNN(nn.Module):
     def __init__(self, input_size, hidden_size, output_size, model, n_layers=2):
@@ -29,7 +29,6 @@ class CharRNN(nn.Module):
         output = self.decoder(output.view(batch_size, -1))
         return output, hidden
 
-    # TODO: remove Variable()
     def init_hidden(self, batch_size):
         if self.model == "lstm":
             return (torch.zeros(self.n_layers, batch_size, self.hidden_size),
