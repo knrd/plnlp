@@ -8,7 +8,7 @@ import torch
 
 # Reading and un-unicode-encoding data
 
-all_characters = string.printable
+all_characters = "\0" + string.printable
 n_characters = len(all_characters)
 
 
@@ -18,14 +18,17 @@ def read_file(filename):
 
 
 # Turning a string into a tensor
-def char_tensor(string):
-    tensor = torch.zeros(len(string)).long()
-    for c in range(len(string)):
-        try:
-            tensor[c] = all_characters.index(string[c])
-        except:
-            continue
-    return tensor
+def char2tensor(s):
+    i_in = [all_characters.find(s[i]) for i in range(0, len(s) - 1)]
+    i_out = [all_characters.find(s[i]) for i in range(1, len(s))]
+
+    # replacing -1 with 0
+    i_in = [i if i >= 0 else 0 for i in i_in]
+    i_out = [i if i >= 0 else 0 for i in i_out]
+
+    t_in = torch.tensor(i_in, dtype=torch.int64)
+    t_out = torch.tensor(i_out, dtype=torch.int64)
+    return t_in, t_out
 
 
 def start_time():

@@ -5,7 +5,9 @@ import torch.nn as nn
 from torch.autograd import Variable
 
 class CharRNN(nn.Module):
-    def __init__(self, input_size, hidden_size, output_size, model="gru", n_layers=1):
+    def __init__(self, input_size, hidden_size, output_size, model, n_layers=2):
+        assert model in ["gru", "lstm"]
+
         super(CharRNN, self).__init__()
         self.model = model.lower()
         self.input_size = input_size
@@ -27,16 +29,10 @@ class CharRNN(nn.Module):
         output = self.decoder(output.view(batch_size, -1))
         return output, hidden
 
-    def forward2(self, input, hidden):
-        encoded = self.encoder(input.view(1, -1))
-        output, hidden = self.rnn(encoded.view(1, 1, -1), hidden)
-        output = self.decoder(output.view(1, -1))
-        return output, hidden
-
     # TODO: remove Variable()
     def init_hidden(self, batch_size):
         if self.model == "lstm":
-            return (Variable(torch.zeros(self.n_layers, batch_size, self.hidden_size)),
-                    Variable(torch.zeros(self.n_layers, batch_size, self.hidden_size)))
-        return Variable(torch.zeros(self.n_layers, batch_size, self.hidden_size))
+            return (torch.zeros(self.n_layers, batch_size, self.hidden_size),
+                    torch.zeros(self.n_layers, batch_size, self.hidden_size))
+        return torch.zeros(self.n_layers, batch_size, self.hidden_size)
 

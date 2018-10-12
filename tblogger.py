@@ -16,13 +16,12 @@ class TBLogger(object):
         self.log_dir = log_dir
         self.writers = {}
 
+    def get_path(self, sub_dir):
+        return os.path.join(self.log_dir, sub_dir) if sub_dir else self.log_dir
+
     def _get_writer(self, sub_dir):
         """Create a summary writer logging to log_dir."""
-        if sub_dir:
-            path = os.path.join(self.log_dir, sub_dir)
-        else:
-            path = self.log_dir
-
+        path = self.get_path(sub_dir)
         writer = self.writers.get(path)
         if writer is None:
             self.writers[path] = tf.summary.FileWriter(path)
@@ -86,4 +85,8 @@ class TBLogger(object):
         # Create and write Summary
         summary = tf.Summary(value=[tf.Summary.Value(tag=tag, histo=hist)])
         writer.add_summary(summary, step)
+        writer.flush()
+
+    def flush(self, sub_dir):
+        writer = self._get_writer(sub_dir)
         writer.flush()

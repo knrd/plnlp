@@ -6,10 +6,9 @@ import os
 import random
 import torch
 import torch.nn as nn
-from torch.autograd import Variable
 from tqdm import tqdm
 
-from helpers import char_tensor, read_file, start_time, time_since, n_characters
+from helpers import read_file, start_time, time_since, n_characters, char2tensor
 from model import CharRNN
 from generate import generate
 from tblogger import TBLogger
@@ -17,8 +16,6 @@ from tblogger import TBLogger
 
 class Trainer(object):
     def __init__(self, filename, model="gru", hidden_size=100, n_layers=2, cuda=True, chunk_len=200, batch_size=100, tensorboard=True, verbose=1):
-        assert model in ["gru", "lstm"]
-
         self.verbose = verbose
         self.cuda = cuda
         self.filename = filename
@@ -38,9 +35,9 @@ class Trainer(object):
 
         # Initialize models
         self.decoder = CharRNN(
-            n_characters,
-            self.hidden_size,
-            n_characters,
+            input_size=n_characters,
+            hidden_size=self.hidden_size,
+            output_size=n_characters,
             model=model,
             n_layers=self.n_layers,
         )
@@ -53,13 +50,10 @@ class Trainer(object):
         inp = torch.LongTensor(self.batch_size, self.chunk_len)
         target = torch.LongTensor(self.batch_size, self.chunk_len)
         for bi in range(self.batch_size):
-            start_index = random.randint(0, self.file_len - self.chunk_len)
+            start_index = random.randint(0, self.file_len - self.chunk_len - 1)
             end_index = start_index + self.chunk_len + 1
             chunk = self.file[start_index:end_index]
-            inp[bi] = char_tensor(chunk[:-1])
-            target[bi] = char_tensor(chunk[1:])
-        inp = Variable(inp)
-        target = Variable(target)
+            inp[bi], target[bi] = char2tensor(chunk)
         if self.cuda:
             inp = inp.cuda()
             target = target.cuda()
@@ -88,10 +82,15 @@ class Trainer(object):
 
         return loss.data.item() / self.chunk_len, accuracy.data.item()
 
-    def train(self, learning_rate, n_epochs=200, print_every=100):
-        if self.cuda and self.verbose:
-            print("Using CUDA")
-        label = "m_%s-lr_%s-hs_%d-nl-%d" % (self.model, learning_rate, self.hidden_size, self.n_layers)
+    def train(self, learning_rate, n_epochs=200, print_every=0, skip_if_tested=False):
+        label = "e_%d-m_%s-lr_%s-hs_%d-nl-%d" % (n_epochs, self.model, learning_rate, self.hidden_size, self.n_layers)
+
+        if skip_if_tested:
+            if not self.logger:
+                raise AttributeError('logger is not provided')
+            if os.path.exists(self.logger.get_path(label)):
+                print("Test", label, "exists, skipping")
+                return None
 
         decoder_optimizer = torch.optim.Adam(self.decoder.parameters(), lr=learning_rate)
         try:
@@ -108,7 +107,7 @@ class Trainer(object):
                     for tag, value in info.items():
                         self.logger.scalar_summary(label, tag, value, epoch)
 
-                if self.verbose and epoch % print_every == 0:
+                if self.verbose and print_every and epoch % print_every == 0:
                     print('[%s (%d %d%%) %.4f]' % (time_since(self.start), epoch, epoch / n_epochs * 100, loss))
                     if self.verbose > 1:
                         print(generate(self.decoder, 'Wh', 100, cuda=self.cuda), '\n')
@@ -125,6 +124,7 @@ class Trainer(object):
         os.makedirs('models', exist_ok=True)
         save_filename = os.path.join('models', os.path.splitext(os.path.basename(self.filename))[0] + label + '.pt')
         torch.save(self.decoder, save_filename)
+        self.logger.flush(label)
         print('Saved as %s' % save_filename)
 
 
@@ -133,20 +133,22 @@ if __name__ == '__main__':
     # Parse command line arguments
     argparser = argparse.ArgumentParser()
     # argparser.add_argument('filename', type=str)
-    argparser.add_argument('--model', type=str, default="gru")
-    argparser.add_argument('--n_epochs', type=int, default=2000)
-    argparser.add_argument('--print_every', type=int, default=1)
-    argparser.add_argument('--hidden_size', type=int, default=100)
-    argparser.add_argument('--n_layers', type=int, default=2)
-    argparser.add_argument('--learning_rate', type=float, default=0.01)
-    argparser.add_argument('--chunk_len', type=int, default=200)
-    argparser.add_argument('--batch_size', type=int, default=100)
+    # argparser.add_argument('--model', type=str, default="gru")
+    # argparser.add_argument('--n_epochs', type=int, default=2000)
+    # argparser.add_argument('--print_every', type=int, default=1)
+    # argparser.add_argument('--hidden_size', type=int, default=100)
+    # argparser.add_argument('--n_layers', type=int, default=2)
+    # argparser.add_argument('--learning_rate', type=float, default=0.01)
+    # argparser.add_argument('--chunk_len', type=int, default=200)
+    # argparser.add_argument('--batch_size', type=int, default=100)
     argparser.add_argument('--nocuda', action='store_true', default=False)
     args = argparser.parse_args()
 
-    print('Running tests')
-    for model in ["gru", "lstm"]:
-        for hidden_size in [100, 50]:
-            for lr in [0.003, 0.01, 0.03, 0.1, 0.3][::-1]:
-                t = Trainer(filename='shakespeare.txt', model=model, hidden_size=hidden_size, cuda=not args.nocuda)
-                t.train(lr, n_epochs=200)
+    use_cuda = not args.nocuda
+
+    print('Running tests', 'using CUDA' if use_cuda else 'CPU')
+    for model in ["gru"]:
+        for hidden_size in [100]:
+            for lr in [0.01][::-1]:
+                t = Trainer(filename='shakespeare.txt', model=model, hidden_size=hidden_size, cuda=False)
+                t.train(lr, n_epochs=10, skip_if_tested=False)
