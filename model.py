@@ -34,4 +34,3 @@ class CharRNN(nn.Module):
             return (torch.zeros(self.n_layers, batch_size, self.hidden_size),
                     torch.zeros(self.n_layers, batch_size, self.hidden_size))
         return torch.zeros(self.n_layers, batch_size, self.hidden_size)
-

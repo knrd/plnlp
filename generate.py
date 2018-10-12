@@ -2,7 +2,6 @@
 # https://github.com/spro/char-rnn.pytorch
 
 import torch
-import os
 import argparse
 
 from content_reader import FileReader

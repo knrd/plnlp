@@ -92,7 +92,7 @@ class Trainer(object):
             if not self.logger:
                 raise AttributeError('logger is not provided')
             if os.path.exists(self.logger.get_path(label)):
-                print("Test", label, "exists, skipping", flush=True)
+                print("Test %s exists, skipping" % label, flush=True)
                 return None
 
         decoder_optimizer = torch.optim.Adam(self.decoder.parameters(), lr=learning_rate)
