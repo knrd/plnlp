@@ -90,7 +90,7 @@ class Trainer(object):
         file_name = os.path.splitext(os.path.basename(self.content_reader.file_name))[0]
         label = "%s--e_%d-m_%s-lr_%s-hs_%d-nl-%d" % (file_name, n_epochs, self.model, learning_rate, self.hidden_size, self.n_layers)
         if version:
-            label += "_ver-%d" % version
+            label += "_ver-%s" % version
 
         if train_saved_model:
             self.load_saved_model(train_saved_model)
@@ -120,7 +120,6 @@ class Trainer(object):
                         self.logger.scalar_summary(label, tag, value, epoch)
 
             if save_model:
-                print("Saving...", flush=True)
                 self.save(label)
 
         except KeyboardInterrupt:
@@ -171,7 +170,7 @@ if __name__ == '__main__':
     argparser.add_argument('--nocuda', action='store_true', default=False)
     args = argparser.parse_args()
 
-    use_cuda = 0 and not args.nocuda
+    use_cuda = 1 and not args.nocuda
 
     # content = FileReader('content', 'psy.txt')
     content = FileReader('content', 'shakespeare.txt')
@@ -179,10 +178,10 @@ if __name__ == '__main__':
 
     print('Running tests', 'using CUDA' if use_cuda else 'CPU', flush=True)
     for model in ["lstm"]:
-        for hidden_size in [100]:
+        for hidden_size in [256]:
             for lr in [0.01][::-1]:
                 t = Trainer(content_reader=content, model=model, hidden_size=hidden_size, cuda=use_cuda)
-                t.train(lr, n_epochs=2, save_model=False, save_logs=False)
+                t.train(lr, n_epochs=10, save_model=False, save_logs=False)
 
                 generated_text = generate(t.get_cpu_decoder_copy(), prime_str='Olo Angela.')
                 print(generated_text, '\n', flush=True)

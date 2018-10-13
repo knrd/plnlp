@@ -1,7 +1,9 @@
 # https://github.com/spro/char-rnn.pytorch
 
+import math
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class CharRNN2(nn.Module):
@@ -12,22 +14,23 @@ class CharRNN2(nn.Module):
         self.model = model.lower()
         self.char_dict = char_dict
         self.input_size = len(char_dict)
+        self.n_fac = math.floor(self.input_size * .7)
         self.hidden_size = hidden_size
         self.output_size = len(char_dict)
         self.n_layers = n_layers
 
-        self.encoder = nn.Embedding(self.input_size, hidden_size)
+        self.encoder = nn.Embedding(self.input_size, self.n_fac)
         if self.model == "gru":
-            self.rnn = nn.GRU(hidden_size, hidden_size, n_layers)
+            self.rnn = nn.GRU(self.n_fac, self.hidden_size, self.n_layers)
         elif self.model == "lstm":
-            self.rnn = nn.LSTM(hidden_size, hidden_size, n_layers)
-        self.decoder = nn.Linear(hidden_size, self.output_size)
+            self.rnn = nn.LSTM(self.n_fac, self.hidden_size, self.n_layers)
+        self.decoder = nn.Linear(self.hidden_size, self.output_size)
 
     def forward(self, input, hidden):
         batch_size = input.size(0)
         encoded = self.encoder(input)
         output, hidden = self.rnn(encoded.view(1, batch_size, -1), hidden)
-        output = self.decoder(output.view(batch_size, -1))
+        output = F.log_softmax(self.decoder(output.view(batch_size, -1)), dim=-1)
         return output, hidden
 
     def init_hidden(self, batch_size):
