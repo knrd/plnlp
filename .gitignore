@@ -1,7 +1,7 @@
 .idea/
 logs/
 models/
+temp/
 __pycache__/
 *tgz
 .ipynb_checkpoints/
-

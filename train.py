@@ -87,7 +87,8 @@ class Trainer(object):
         return chunk_loss, accuracy
 
     def train(self, learning_rate, n_epochs=200, skip_if_tested=False, save_model=True, train_saved_model=None, save_logs=True, version=0):
-        label = "e_%d-m_%s-lr_%s-hs_%d-nl-%d" % (n_epochs, self.model, learning_rate, self.hidden_size, self.n_layers)
+        file_name = os.path.splitext(os.path.basename(self.content_reader.file_name))[0]
+        label = "%s--e_%d-m_%s-lr_%s-hs_%d-nl-%d" % (file_name, n_epochs, self.model, learning_rate, self.hidden_size, self.n_layers)
         if version:
             label += "_ver-%d" % version
 
@@ -137,7 +138,7 @@ class Trainer(object):
 
     def get_model_path(self, label):
         os.makedirs('models', exist_ok=True)
-        return os.path.join('models', os.path.splitext(os.path.basename(self.content_reader.file_name))[0] + "_" + label + '.pt')
+        return os.path.join('models', label + '.pt')
 
     def get_cpu_decoder_copy(self):
         return copy.deepcopy(self.decoder).cpu()
@@ -170,17 +171,18 @@ if __name__ == '__main__':
     argparser.add_argument('--nocuda', action='store_true', default=False)
     args = argparser.parse_args()
 
-    use_cuda = not args.nocuda
+    use_cuda = 0 and not args.nocuda
 
-    content = FileReader('shakespeare.txt')
-    # print(content.char_dict)
+    # content = FileReader('content', 'psy.txt')
+    content = FileReader('content', 'shakespeare.txt')
+    print(len(content.char_dict), content.char_dict[1:])
 
     print('Running tests', 'using CUDA' if use_cuda else 'CPU', flush=True)
     for model in ["lstm"]:
         for hidden_size in [100]:
             for lr in [0.01][::-1]:
                 t = Trainer(content_reader=content, model=model, hidden_size=hidden_size, cuda=use_cuda)
-                t.train(lr, n_epochs=10, save_model=False, save_logs=False)
+                t.train(lr, n_epochs=2, save_model=False, save_logs=False)
 
-                generated_text = generate(t.get_cpu_decoder_copy(), prime_str='Wh')
+                generated_text = generate(t.get_cpu_decoder_copy(), prime_str='Olo Angela.')
                 print(generated_text, '\n', flush=True)
