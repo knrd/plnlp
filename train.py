@@ -81,9 +81,10 @@ class Trainer(object):
         decoder_optimizer.step()
 
         _, argmax = torch.max(output, 1)
-        accuracy = (target[:, c] == argmax.squeeze()).float().mean()
+        accuracy = (target[:, c] == argmax).sum().item() / argmax.size(0)
+        chunk_loss = loss.item() / self.chunk_len
 
-        return loss.data.item() / self.chunk_len, accuracy.data.item()
+        return chunk_loss, accuracy
 
     def train(self, learning_rate, n_epochs=200, skip_if_tested=False, save_model=True, train_saved_model=None, save_logs=True, version=0):
         label = "e_%d-m_%s-lr_%s-hs_%d-nl-%d" % (n_epochs, self.model, learning_rate, self.hidden_size, self.n_layers)
@@ -91,15 +92,7 @@ class Trainer(object):
             label += "_ver-%d" % version
 
         if train_saved_model:
-            saved_model_path = self.get_model_path(train_saved_model)
-            if os.path.isfile(saved_model_path):
-                self.decoder = torch.load(saved_model_path)
-                if self.cuda:
-                    self.decoder.cuda()
-                print("Loading saved model", saved_model_path, flush=True)
-            else:
-                print("Saved model", saved_model_path, " does not exists. Exiting",flush=True)
-                raise SystemExit
+            self.load_saved_model(train_saved_model)
 
         if skip_if_tested:
             if not self.logger:
@@ -149,6 +142,17 @@ class Trainer(object):
     def get_cpu_decoder_copy(self):
         return copy.deepcopy(self.decoder).cpu()
 
+    def load_saved_model(self, file_name):
+        saved_model_path = self.get_model_path(file_name)
+        if os.path.isfile(saved_model_path):
+            self.decoder = torch.load(saved_model_path)
+            if self.cuda:
+                self.decoder.cuda()
+            print("Loading saved model", saved_model_path, flush=True)
+        else:
+            print("Saved model", saved_model_path, " does not exists. Exiting", flush=True)
+            raise SystemExit
+
 
 # Run as standalone script
 if __name__ == '__main__':
@@ -176,7 +180,7 @@ if __name__ == '__main__':
         for hidden_size in [100]:
             for lr in [0.01][::-1]:
                 t = Trainer(content_reader=content, model=model, hidden_size=hidden_size, cuda=use_cuda)
-                t.train(lr, n_epochs=10, save_logs=False)
+                t.train(lr, n_epochs=10, save_model=False, save_logs=False)
 
-                generated_text = generate(t.get_cpu_decoder_copy(), prime_str='Łó')
+                generated_text = generate(t.get_cpu_decoder_copy(), prime_str='Wh')
                 print(generated_text, '\n', flush=True)
