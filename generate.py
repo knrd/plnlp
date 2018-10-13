@@ -7,10 +7,10 @@ import argparse
 from content_reader import FileReader
 
 
-def generate(decoder, content_reader, prime_str='A', predict_len=100, temperature=0.8, cuda=False):
+def generate(decoder, prime_str='A', predict_len=100, temperature=0.8, cuda=False):
     with torch.no_grad():
         hidden = decoder.init_hidden(1)
-        prime_input = content_reader.char2tensor(prime_str).unsqueeze(0)
+        prime_input = decoder.char2tensor(prime_str).unsqueeze(0)
 
         if cuda:
             if decoder.model == "lstm":
@@ -34,9 +34,9 @@ def generate(decoder, content_reader, prime_str='A', predict_len=100, temperatur
             top_i = torch.multinomial(output_dist, 1)[0]
 
             # Add predicted character to string and use as next input
-            predicted_char = content_reader.char_dict[top_i]
+            predicted_char = decoder.char_dict[top_i]
             predicted += predicted_char
-            inp = content_reader.char2tensor(predicted_char).unsqueeze(0)
+            inp = decoder.char2tensor(predicted_char).unsqueeze(0)
             if cuda:
                 inp = inp.cuda()
 
@@ -51,11 +51,9 @@ if __name__ == '__main__':
     argparser.add_argument('-p', '--prime_str', type=str, default='A')
     argparser.add_argument('-l', '--predict_len', type=int, default=100)
     argparser.add_argument('-t', '--temperature', type=float, default=0.8)
-    argparser.add_argument('--cuda', action='store_true')
+    # argparser.add_argument('--cuda', action='store_true')
     args = argparser.parse_args()
-
-    content = FileReader('shakespeare.txt')
 
     decoder = torch.load(args.filename)
     del args.filename
-    print(generate(decoder, content_reader=content, **vars(args)))
+    print(generate(decoder, **vars(args)))

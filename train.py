@@ -2,6 +2,7 @@
 # https://github.com/spro/char-rnn.pytorch
 
 import argparse
+import copy
 import os
 import random
 import torch
@@ -10,7 +11,7 @@ from tqdm import tqdm
 
 from content_reader import FileReader
 from generate import generate
-from model import CharRNN
+from model import CharRNN2
 from tblogger import TBLogger
 
 
@@ -32,12 +33,11 @@ class Trainer(object):
             self.logger = TBLogger('./logs')
 
         # Initialize models
-        self.decoder = CharRNN(
-            input_size=self.content_reader.char_dict_len,
+        self.decoder = CharRNN2(
             hidden_size=self.hidden_size,
-            output_size=self.content_reader.char_dict_len,
             model=self.model,
             n_layers=self.n_layers,
+            char_dict=content_reader.char_dict
         )
         self.criterion = nn.CrossEntropyLoss()
 
@@ -51,8 +51,8 @@ class Trainer(object):
             start_index = random.randint(0, self.content_reader.content_len - self.chunk_len - 1)
             end_index = start_index + self.chunk_len + 1
             chunk = self.content_reader.content[start_index:end_index]
-            inp[bi] = self.content_reader.char2tensor(chunk[:-1])
-            target[bi] = self.content_reader.char2tensor(chunk[1:])
+            inp[bi] = self.decoder.char2tensor(chunk[:-1])
+            target[bi] = self.decoder.char2tensor(chunk[1:])
 
             # assert (inp[bi] == t_inp).all().item()
             # assert (target[bi] == t_target).all().item()
@@ -94,6 +94,8 @@ class Trainer(object):
             saved_model_path = self.get_model_path(train_saved_model)
             if os.path.isfile(saved_model_path):
                 self.decoder = torch.load(saved_model_path)
+                if self.cuda:
+                    self.decoder.cuda()
                 print("Loading saved model", saved_model_path, flush=True)
             else:
                 print("Saved model", saved_model_path, " does not exists. Exiting",flush=True)
@@ -135,13 +137,17 @@ class Trainer(object):
 
     def save(self, label):
         save_filename = self.get_model_path(label)
-        torch.save(self.decoder, save_filename)
+        cpu_model = self.get_cpu_decoder_copy()
+        torch.save(cpu_model, save_filename)
         self.logger.flush(label)
         print('Saved as %s' % save_filename, flush=True)
 
     def get_model_path(self, label):
         os.makedirs('models', exist_ok=True)
         return os.path.join('models', os.path.splitext(os.path.basename(self.content_reader.file_name))[0] + "_" + label + '.pt')
+
+    def get_cpu_decoder_copy(self):
+        return copy.deepcopy(self.decoder).cpu()
 
 
 # Run as standalone script
@@ -166,11 +172,11 @@ if __name__ == '__main__':
     # print(content.char_dict)
 
     print('Running tests', 'using CUDA' if use_cuda else 'CPU', flush=True)
-    for model in ["gru"]:
+    for model in ["lstm"]:
         for hidden_size in [100]:
             for lr in [0.01][::-1]:
                 t = Trainer(content_reader=content, model=model, hidden_size=hidden_size, cuda=use_cuda)
-                t.train(lr, n_epochs=10, skip_if_tested=False, save_model=False, save_logs=False)
+                t.train(lr, n_epochs=10, save_logs=False)
 
-                generated_text = generate(t.decoder, content, prime_str='Wh', cuda=use_cuda)
+                generated_text = generate(t.get_cpu_decoder_copy(), prime_str='Łó')
                 print(generated_text, '\n', flush=True)
