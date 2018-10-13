@@ -13,7 +13,10 @@ def generate(decoder, content_reader, prime_str='A', predict_len=100, temperatur
         prime_input = content_reader.char2tensor(prime_str).unsqueeze(0)
 
         if cuda:
-            hidden = hidden.cuda()
+            if decoder.model == "lstm":
+                hidden = (hidden[0].cuda(), hidden[1].cuda())
+            else:
+                hidden = hidden.cuda()
             prime_input = prime_input.cuda()
         predicted = prime_str
 

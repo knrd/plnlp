@@ -36,7 +36,7 @@ class Trainer(object):
             input_size=self.content_reader.char_dict_len,
             hidden_size=self.hidden_size,
             output_size=self.content_reader.char_dict_len,
-            model=model,
+            model=self.model,
             n_layers=self.n_layers,
         )
         self.criterion = nn.CrossEntropyLoss()
@@ -85,8 +85,19 @@ class Trainer(object):
 
         return loss.data.item() / self.chunk_len, accuracy.data.item()
 
-    def train(self, learning_rate, n_epochs=200, skip_if_tested=False):
+    def train(self, learning_rate, n_epochs=200, skip_if_tested=False, save_model=True, train_saved_model=None, save_logs=True, version=0):
         label = "e_%d-m_%s-lr_%s-hs_%d-nl-%d" % (n_epochs, self.model, learning_rate, self.hidden_size, self.n_layers)
+        if version:
+            label += "_ver-%d" % version
+
+        if train_saved_model:
+            saved_model_path = self.get_model_path(train_saved_model)
+            if os.path.isfile(saved_model_path):
+                self.decoder = torch.load(saved_model_path)
+                print("Loading saved model", saved_model_path, flush=True)
+            else:
+                print("Saved model", saved_model_path, " does not exists. Exiting",flush=True)
+                raise SystemExit
 
         if skip_if_tested:
             if not self.logger:
@@ -98,35 +109,39 @@ class Trainer(object):
         decoder_optimizer = torch.optim.Adam(self.decoder.parameters(), lr=learning_rate)
         try:
             print("Training %s for %d epochs..." % (label, n_epochs), flush=True)
-            for epoch in tqdm(range(1, n_epochs + 1)):
+            tt = tqdm(range(1, n_epochs + 1))
+            for epoch in tt:
                 inp, target = self._random_training_set()
                 loss, accuracy = self.train_step(inp, target, decoder_optimizer)
+                tt.set_description('loss=%g' % loss)
                 self.loss_avg += loss
 
-                if self.logger:
+                if self.logger and save_logs:
                     # 1. Log scalar values (scalar summary)
                     info = {'loss': loss, 'accuracy': accuracy, 'learning_rate': learning_rate}
 
                     for tag, value in info.items():
                         self.logger.scalar_summary(label, tag, value, epoch)
 
-                # if self.verbose > 1:
-                #     print(generate(self.decoder, 'Wh', 100, cuda=self.cuda), '\n')
-
-            print("Saving...", flush=True)
-            self.save(label)
+            if save_model:
+                print("Saving...", flush=True)
+                self.save(label)
 
         except KeyboardInterrupt:
-            print("Saving before quit...", flush=True)
-            self.save(label)
-            raise SystemExit
+            if save_model:
+                print("Saving before quit...", flush=True)
+                self.save(label)
+                raise SystemExit
 
-    def save(self, label=''):
-        os.makedirs('models', exist_ok=True)
-        save_filename = os.path.join('models', os.path.splitext(os.path.basename(self.content_reader.file_name))[0] + label + '.pt')
+    def save(self, label):
+        save_filename = self.get_model_path(label)
         torch.save(self.decoder, save_filename)
         self.logger.flush(label)
         print('Saved as %s' % save_filename, flush=True)
+
+    def get_model_path(self, label):
+        os.makedirs('models', exist_ok=True)
+        return os.path.join('models', os.path.splitext(os.path.basename(self.content_reader.file_name))[0] + "_" + label + '.pt')
 
 
 # Run as standalone script
@@ -155,7 +170,7 @@ if __name__ == '__main__':
         for hidden_size in [100]:
             for lr in [0.01][::-1]:
                 t = Trainer(content_reader=content, model=model, hidden_size=hidden_size, cuda=use_cuda)
-                t.train(lr, n_epochs=2, skip_if_tested=False)
+                t.train(lr, n_epochs=10, skip_if_tested=False, save_model=False, save_logs=False)
 
                 generated_text = generate(t.decoder, content, prime_str='Wh', cuda=use_cuda)
                 print(generated_text, '\n', flush=True)

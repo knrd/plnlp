@@ -2,3 +2,6 @@
 logs/
 models/
 __pycache__/
+*tgz
+.ipynb_checkpoints/
+
