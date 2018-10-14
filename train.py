@@ -102,6 +102,7 @@ class Trainer(object):
                 print("Test %s exists, skipping" % label, flush=True)
                 return None
 
+        self.decoder.train()
         decoder_optimizer = torch.optim.Adam(self.decoder.parameters(), lr=learning_rate)
         try:
             print("Training %s for %d epochs..." % (label, n_epochs), flush=True)
@@ -158,30 +159,25 @@ class Trainer(object):
 if __name__ == '__main__':
     # Parse command line arguments
     argparser = argparse.ArgumentParser()
-    # argparser.add_argument('filename', type=str)
-    # argparser.add_argument('--model', type=str, default="gru")
-    # argparser.add_argument('--n_epochs', type=int, default=2000)
-    # argparser.add_argument('--print_every', type=int, default=1)
-    # argparser.add_argument('--hidden_size', type=int, default=100)
+    argparser.add_argument('filename', type=str)
+    argparser.add_argument('--model', type=str, default="lstm")
+    argparser.add_argument('--n_epochs', type=int, default=4)
+    argparser.add_argument('--hidden_size', type=int, default=256)
     # argparser.add_argument('--n_layers', type=int, default=2)
     # argparser.add_argument('--learning_rate', type=float, default=0.01)
     # argparser.add_argument('--chunk_len', type=int, default=200)
     # argparser.add_argument('--batch_size', type=int, default=100)
-    argparser.add_argument('--nocuda', action='store_true', default=False)
+    argparser.add_argument('--cuda', action='store_true', default=False)
     args = argparser.parse_args()
 
-    use_cuda = 1 and not args.nocuda
-
     # content = FileReader('content', 'psy.txt')
-    content = FileReader('content', 'shakespeare.txt')
+    content = FileReader('content', args.filename)
     print(len(content.char_dict), content.char_dict[1:])
 
-    print('Running tests', 'using CUDA' if use_cuda else 'CPU', flush=True)
-    for model in ["lstm"]:
-        for hidden_size in [256]:
-            for lr in [0.01][::-1]:
-                t = Trainer(content_reader=content, model=model, hidden_size=hidden_size, cuda=use_cuda)
-                t.train(lr, n_epochs=10, save_model=False, save_logs=False)
+    print('Running tests', 'using CUDA' if args.cuda else 'CPU', flush=True)
+    lr = 0.01
+    t = Trainer(content_reader=content, model=args.model, hidden_size=args.hidden_size, cuda=args.cuda)
+    t.train(lr, n_epochs=10, save_model=False, save_logs=False)
 
-                generated_text = generate(t.get_cpu_decoder_copy(), prime_str='Olo Angela.')
-                print(generated_text, '\n', flush=True)
+    generated_text = generate(t.get_cpu_decoder_copy(), prime_str='Olo Angela.')
+    print(generated_text, '\n', flush=True)
