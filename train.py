@@ -88,7 +88,7 @@ class Trainer(object):
 
         return chunk_loss, accuracy
 
-    def train(self, learning_rate, n_epochs=200, skip_if_tested=False, save_model=True, train_saved_model=None, save_logs=True, version=0, checkpoint_every=0):
+    def train(self, learning_rate, n_epochs=200, skip_if_tested=False, save_model=True, train_saved_model=None, save_logs=True, version=0, checkpoint_every=0, weight_decay=0.0):
         file_name = os.path.splitext(os.path.basename(self.content_reader.file_name))[0]
         label = "%s--e_%d-m_%s-lr_%s-hs_%d" % (file_name, n_epochs, self.model, learning_rate, self.hidden_size)
         if version:
@@ -105,6 +105,7 @@ class Trainer(object):
             # update learning rate
             for param_group in self.decoder_optimizer.param_groups:
                 param_group['lr'] = learning_rate
+                param_group['weight_decay'] = weight_decay
 
         if skip_if_tested:
             if not self.logger:
@@ -201,6 +202,8 @@ if __name__ == '__main__':
     # argparser.add_argument('--chunk_len', type=int, default=200)
     # argparser.add_argument('--batch_size', type=int, default=100)
     argparser.add_argument('--cuda', action='store_true', default=False)
+    argparser.add_argument('--dont_save_model', action='store_true', default=False)
+    argparser.add_argument('--dont_save_logs', action='store_true', default=False)
     args = argparser.parse_args()
 
     # content = FileReader('content', 'psy.txt')
@@ -210,7 +213,7 @@ if __name__ == '__main__':
     print('Running tests', 'using CUDA' if args.cuda else 'CPU', flush=True)
     t = Trainer(content_reader=content, model=args.model, hidden_size=args.hidden_size, cuda=args.cuda)
     # t.train(args.learning_rate, n_epochs=args.n_epochs, train_saved_model='przygody-tomka-sawyera--e_3-m_lstm-lr_0.01-hs_32', version=2, checkpoint_every=1)
-    t.train(args.learning_rate, n_epochs=args.n_epochs)
+    t.train(args.learning_rate, n_epochs=args.n_epochs, save_model=not args.dont_save_model, save_logs=not args.dont_save_logs)
 
     generated_text = generate(t.get_cpu_decoder_copy(), prime_str='Olo Angela.')
     print(generated_text, '\n', flush=True)
