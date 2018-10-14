@@ -31,6 +31,8 @@ class Trainer(object):
         self.logger = None
         if self.tensorboard:
             self.logger = TBLogger('./logs')
+        # this will be setup in train method
+        self.decoder_optimizer = None
 
         # Initialize models
         self.decoder = CharRNN2(
@@ -62,7 +64,7 @@ class Trainer(object):
             target = target.cuda()
         return inp, target
 
-    def train_step(self, inp, target, decoder_optimizer):
+    def train_step(self, inp, target):
         hidden = self.decoder.init_hidden(self.batch_size)
         if self.cuda:
             if self.model == "lstm":
@@ -78,7 +80,7 @@ class Trainer(object):
             loss += self.criterion(output.view(self.batch_size, -1), target[:, c])
 
         loss.backward()
-        decoder_optimizer.step()
+        self.decoder_optimizer.step()
 
         _, argmax = torch.max(output, 1)
         accuracy = (target[:, c] == argmax).sum().item() / argmax.size(0)
@@ -86,14 +88,20 @@ class Trainer(object):
 
         return chunk_loss, accuracy
 
-    def train(self, learning_rate, n_epochs=200, skip_if_tested=False, save_model=True, train_saved_model=None, save_logs=True, version=0):
+    def train(self, learning_rate, n_epochs=200, skip_if_tested=False, save_model=True, train_saved_model=None, save_logs=True, version=0, checkpoint_every=0):
         file_name = os.path.splitext(os.path.basename(self.content_reader.file_name))[0]
-        label = "%s--e_%d-m_%s-lr_%s-hs_%d-nl-%d" % (file_name, n_epochs, self.model, learning_rate, self.hidden_size, self.n_layers)
+        label = "%s--e_%d-m_%s-lr_%s-hs_%d" % (file_name, n_epochs, self.model, learning_rate, self.hidden_size)
         if version:
             label += "_ver-%s" % version
 
+        self.decoder_optimizer = torch.optim.Adam(self.decoder.parameters(), lr=learning_rate)
+        epoch = 0
+        epoch_delta = 0
+        loss = 0
         if train_saved_model:
-            self.load_saved_model(train_saved_model)
+            if not version:
+                raise AttributeError('provide version')
+            epoch_delta = self.load_saved_model(train_saved_model)
 
         if skip_if_tested:
             if not self.logger:
@@ -102,39 +110,58 @@ class Trainer(object):
                 print("Test %s exists, skipping" % label, flush=True)
                 return None
 
+        epoch_to_save = epoch + epoch_delta
         self.decoder.train()
-        decoder_optimizer = torch.optim.Adam(self.decoder.parameters(), lr=learning_rate)
         try:
             print("Training %s for %d epochs..." % (label, n_epochs), flush=True)
             tt = tqdm(range(1, n_epochs + 1))
             for epoch in tt:
+                epoch_to_save = epoch + epoch_delta
                 inp, target = self._random_training_set()
-                loss, accuracy = self.train_step(inp, target, decoder_optimizer)
+                loss, accuracy = self.train_step(inp, target)
                 tt.set_description('loss=%g' % loss)
                 self.loss_avg += loss
 
                 if self.logger and save_logs:
-                    # 1. Log scalar values (scalar summary)
                     info = {'loss': loss, 'accuracy': accuracy, 'learning_rate': learning_rate}
-
                     for tag, value in info.items():
-                        self.logger.scalar_summary(label, tag, value, epoch)
+                        self.logger.scalar_summary(label, tag, value, epoch_to_save)
+
+                if checkpoint_every and epoch % checkpoint_every == 0:
+                    self.save_model(label, epoch_to_save, loss, checkpoint=epoch)
+                    print('Saved model checkpoint %s at %d' % (label, epoch), flush=True)
 
             if save_model:
-                self.save(label)
+                self.save_model(label, epoch_to_save, loss)
+                print('Saved model %s' % label, flush=True)
 
         except KeyboardInterrupt:
             if save_model:
                 print("Saving before quit...", flush=True)
-                self.save(label)
+                self.save_model(label, epoch_to_save, loss)
                 raise SystemExit
 
-    def save(self, label):
+        if self.logger and save_logs:
+            self.logger.flush(label)
+
+    def save_model(self, label, epoch, loss, checkpoint=0):
         save_filename = self.get_model_path(label)
+        if checkpoint:
+            save_filename += "check%d" % checkpoint
         cpu_model = self.get_cpu_decoder_copy()
-        torch.save(cpu_model, save_filename)
-        self.logger.flush(label)
-        print('Saved as %s' % save_filename, flush=True)
+        torch.save({
+            'model_state': cpu_model.state_dict(),
+            'optimizer_state': self.decoder_optimizer.state_dict(),
+            'epoch': epoch,
+            'loss': loss,
+            'checkpoint': checkpoint,
+            'version': (0, 1),
+            'model_hidden_size': self.hidden_size,
+            'model_type': self.model,
+            'model_n_layers': self.n_layers,
+            'model_char_dict': self.content_reader.char_dict
+        }, save_filename)
+        torch.save(cpu_model, save_filename + "cpu")
 
     def get_model_path(self, label):
         os.makedirs('models', exist_ok=True)
@@ -146,10 +173,13 @@ class Trainer(object):
     def load_saved_model(self, file_name):
         saved_model_path = self.get_model_path(file_name)
         if os.path.isfile(saved_model_path):
-            self.decoder = torch.load(saved_model_path)
+            state = torch.load(saved_model_path)
+            self.decoder.load_state_dict(state['model_state'])
+            self.decoder_optimizer.load_state_dict(state['optimizer_state'])
             if self.cuda:
                 self.decoder.cuda()
-            print("Loading saved model", saved_model_path, flush=True)
+            print("Loaded saved model", saved_model_path, flush=True)
+            return state['epoch']
         else:
             print("Saved model", saved_model_path, " does not exists. Exiting", flush=True)
             raise SystemExit
@@ -161,10 +191,10 @@ if __name__ == '__main__':
     argparser = argparse.ArgumentParser()
     argparser.add_argument('filename', type=str)
     argparser.add_argument('--model', type=str, default="lstm")
-    argparser.add_argument('--n_epochs', type=int, default=4)
-    argparser.add_argument('--hidden_size', type=int, default=256)
+    argparser.add_argument('--n_epochs', type=int, default=5)
+    argparser.add_argument('--hidden_size', type=int, default=512)
     # argparser.add_argument('--n_layers', type=int, default=2)
-    # argparser.add_argument('--learning_rate', type=float, default=0.01)
+    argparser.add_argument('--learning_rate', type=float, default=0.003)
     # argparser.add_argument('--chunk_len', type=int, default=200)
     # argparser.add_argument('--batch_size', type=int, default=100)
     argparser.add_argument('--cuda', action='store_true', default=False)
@@ -175,9 +205,9 @@ if __name__ == '__main__':
     print(len(content.char_dict), content.char_dict[1:])
 
     print('Running tests', 'using CUDA' if args.cuda else 'CPU', flush=True)
-    lr = 0.01
     t = Trainer(content_reader=content, model=args.model, hidden_size=args.hidden_size, cuda=args.cuda)
-    t.train(lr, n_epochs=10, save_model=False, save_logs=False)
+    # t.train(args.learning_rate, n_epochs=args.n_epochs, train_saved_model='przygody-tomka-sawyera--e_3-m_lstm-lr_0.01-hs_32', version=2, checkpoint_every=1)
+    t.train(args.learning_rate, n_epochs=args.n_epochs)
 
     generated_text = generate(t.get_cpu_decoder_copy(), prime_str='Olo Angela.')
     print(generated_text, '\n', flush=True)

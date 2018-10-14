@@ -4,7 +4,7 @@
 import torch
 import argparse
 
-from content_reader import FileReader
+from model import CharRNN2
 
 
 def generate(decoder, prime_str='A', predict_len=100, temperature=0.8, cuda=False):
@@ -55,6 +55,9 @@ if __name__ == '__main__':
     # argparser.add_argument('--cuda', action='store_true')
     args = argparser.parse_args()
 
-    decoder = torch.load(args.filename)
+    state = torch.load(args.filename)
+    assert state['version'] == (0, 1)
+    decoder = CharRNN2(state['model_hidden_size'], state['model_type'], state['model_char_dict'], state['model_n_layers'])
+    decoder.load_state_dict(state['model_state'])
     del args.filename
     print(generate(decoder, **vars(args)))
