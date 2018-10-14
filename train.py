@@ -102,6 +102,9 @@ class Trainer(object):
             if not version:
                 raise AttributeError('provide version')
             epoch_delta = self.load_saved_model(train_saved_model)
+            # update learning rate
+            for param_group in self.decoder_optimizer.param_groups:
+                param_group['lr'] = learning_rate
 
         if skip_if_tested:
             if not self.logger:
